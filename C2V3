@@ -1,0 +1,159 @@
+1. Updated swft-trigger-eform.service.ts
+Modifications:
+
+Inject Injector in the constructor.
+Modify the getEformListByChannel method to dynamically resolve the component instance using the Injector
+
+ import { Injectable, Injector, Type } from '@angular/core'; // Import Injector and Type
+import { SubSink } from 'subsink';
+import { SwftIntakeService } from '@swft/swft-ngx-intake-service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { NgProgressComponent } from 'ngx-progressbar';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class SwftTriggerEformService {
+  private subs = new SubSink();
+  public progressBar!: NgProgressComponent;
+
+  constructor(
+    private swftIntakeService: SwftIntakeService,
+    private snackBar: MatSnackBar,
+    private injector: Injector // Inject Injector
+  ) {}
+
+  // Fetch the list of forms based on the provided channel
+  getEformListByChannel<T>(channel: string, componentType: Type<T>) { // Modify method to use Type<T>
+    const swftComponentInstance = this.injector.get(componentType); // Dynamically resolve the component instance
+    this.subs.add(
+      this.swftIntakeService.listFormsDetailsByChannel(undefined, channel, undefined, undefined).subscribe({
+        next: (response: any) => {
+          const getFormList = response?.result?.results?.eformList;
+          // Call assignFilterOptions on the swftComponentInstance
+          (swftComponentInstance as any).assignFilterOptions(getFormList); // Assign forms to the component instance and set up filtering
+          this.progressBar?.complete();
+        },
+        error: (error: any) => {
+          this.openSnackBar(`Error while fetching eform list: ${error}`);
+          this.progressBar?.complete();
+        }
+      })
+    );
+  }
+
+  // Display a snackbar message for errors
+  openSnackBar(msg: string, action?: string) {
+    this.snackBar.open(msg, action ? action : 'Close', {
+      verticalPosition: 'top',
+    });
+    setTimeout(() => {
+      this.snackBar?.dismiss();
+    }, 5000);
+  }
+}
+
+2. Ensure Component Has Method
+No changes needed in swft-select-eforms.component.ts if it already contains the assignFilterOptions method.
+
+3. Update Component to Call Service
+Modifications:
+
+Inject Injector in the constructor.
+Update ngOnInit to call the service method with the component type.
+
+import { Component, OnInit, EventEmitter, Output, Input, Injector } from '@angular/core'; // Import Injector
+import { MatDialog } from '@angular/material/dialog';
+import { DatePipe } from '@angular/common';
+import { SwftTriggerEformService } from './swft-trigger-eform.service';
+import { SwftSelectEformsComponent } from './swft-select-eforms.component';
+
+@Component({
+  selector: 'app-swft-trigger-eform',
+  templateUrl: './swft-trigger-eform.component.html',
+  styleUrls: ['./swft-trigger-eform.component.scss'],
+  providers: [SwftTriggerEformService, DatePipe] // Provide services here since no module
+})
+export class SwftTriggerEformComponent implements OnInit {
+  @Input() channel!: string; // Input to receive the channel from the consuming application
+  @Output() eformSearch: EventEmitter<any> = new EventEmitter<any>(); // Output event to emit eform search results
+  @Output() selectedFormsList: EventEmitter<any> = new EventEmitter<any>(); // Output event to emit selected forms
+
+  constructor(
+    private datePipe: DatePipe,
+    private swftTriggerEformService: SwftTriggerEformService, // Inject the service
+    public dialog: MatDialog, // Inject MatDialog for opening dialogs
+    private injector: Injector // Inject Injector
+  ) {}
+
+  ngOnInit(): void {
+    // Fetch eform list when component initializes
+    this.swftTriggerEformService.getEformListByChannel(this.channel, SwftSelectEformsComponent); // Pass the component type
+  }
+
+  // Called when "Select Eform" button is clicked
+  startAddingForms() {
+    this.openEformDialog(); // Open the dialog to select forms
+  }
+
+  // Open the dialog to select eForms
+  openEformDialog() {
+    const selectEformDialogRef = this.dialog.open(SwftSelectEformsComponent, {
+      panelClass: 'custom-dialog-container',
+      width: '70%',
+      height: 'calc(100vh - 8px)',
+      position: { top: '20px' },
+      maxHeight: '95vh',
+      ariaLabelledBy: 'Search Recipient',
+      role: 'dialog',
+      delayFocusTrap: true,
+      restoreFocus: true,
+      ariaLabel: 'Search Recipient',
+      autoFocus: 'first-tabbable',
+      data: { channel: this.channel } // Pass the channel to the dialog
+    });
+
+    const selectEformComponentInstance = selectEformDialogRef.componentInstance;
+
+    // Subscribe to the event emitted by the select component
+    selectEformComponentInstance.eFormsFromRequestTypes.subscribe((data: any) => {
+      this.eformSearch.emit({
+        data: data,
+        selectEformComponentInstance: selectEformComponentInstance,
+      });
+    });
+
+    // Subscribe to the event when forms are selected
+    selectEformComponentInstance.selectedEformDataEvent.subscribe((data: any) => {
+      this.selectedFormsList.emit(data); // Emit the selected forms
+      selectEformComponentInstance.selectedForms = data;
+    });
+  }
+
+  // Show warning modal
+  showWarningModal(utility: any) {
+    this.dialog.open(SwftWarningComponent, {
+      width: '50%',
+      panelClass: 'dialog-padding',
+      data: utility,
+      ariaLabelledBy: 'dialog-content',
+      role: 'alertdialog',
+      autoFocus: true,
+      ariaLabel: 'Warning',
+    });
+  }
+}
+
+Summary of Changes:
+Injected Injector:
+
+SwftTriggerEformService and SwftTriggerEformComponent.
+Updated getEformListByChannel Method:
+
+In SwftTriggerEformService to dynamically resolve the component instance.
+Called Service Method with Component Type:
+
+In SwftTriggerEformComponent.
+These changes ensure that the component instance is resolved dynamically using Injector, avoiding circular dependencies while maintaining type safety.
+
+
