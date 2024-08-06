@@ -1,0 +1,43 @@
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.scss']
+})
+export class AppComponent {
+  title = 'consuming-app';
+  channel = 'AWARE'; // Channel to be passed to the library component
+
+  onEformSearch(event: any) {
+    console.log('Eform Search Event:', event); // Handle eform search event
+  }
+}
+
+HTML
+<app-swft-trigger-eform [channel]="channel" (eformSearch)="onEformSearch($event)"></app-swft-trigger-eform>
+
+
+Explanation:
+Library Component (SwftTriggerEformComponent):
+
+This component initializes by calling a service to fetch the list of forms based on the provided channel.
+It opens a dialog to select forms when the "Select Eform" button is clicked.
+The dialog is implemented by SwftSelectEformsComponent.
+Dialog Component (SwftSelectEformsComponent):
+
+This component displays a form to select eForms from a list.
+It filters the list of eForms based on user input.
+Selected eForms are emitted to the parent component.
+Service (SwftTriggerEformService):
+
+This service fetches the list of forms from an API based on the provided channel.
+It handles API errors and shows a snackbar message if an error occurs.
+Consuming Application:
+
+AppComponent uses the SwftTriggerEformComponent and passes the channel "AWARE" to it.
+It handles the eformSearch event to process selected forms.
+Module (AppModule):
+
+This module declares and imports necessary components and modules required for the application to run.
+This setup provides a complete flow from the consuming application to the library component, which opens a dialog for selecting eForms, and handles the selected eForms back in the consuming application.
