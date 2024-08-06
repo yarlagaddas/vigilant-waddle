@@ -1,0 +1,112 @@
+1. swft-trigger-eform.component.ts:
+
+This component is responsible for displaying the button to open the eform selection dialog and for handling the events emitted by the dialog.
+
+import { Component, OnInit, EventEmitter, Output, Input } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { DatePipe } from '@angular/common';
+import { SwftTriggerEformService } from './swft-trigger-eform.service';
+import { SwftSelectEformsComponent } from './swft-select-eforms.component';
+
+@Component({
+  selector: 'app-swft-trigger-eform',
+  templateUrl: './swft-trigger-eform.component.html',
+  styleUrls: ['./swft-trigger-eform.component.scss'],
+  providers: [SwftTriggerEformService, DatePipe] // Provide services here since no module
+})
+export class SwftTriggerEformComponent implements OnInit {
+  @Input() channel!: string; // Input to receive the channel from the consuming application
+  @Output() eformSearch: EventEmitter<any> = new EventEmitter<any>(); // Output event to emit eform search results
+  @Output() selectedFormsList: EventEmitter<any> = new EventEmitter<any>(); // Output event to emit selected forms
+
+  constructor(
+    private datePipe: DatePipe,
+    private swftTriggerEformService: SwftTriggerEformService, // Inject the service
+    public dialog: MatDialog // Inject MatDialog for opening dialogs
+  ) {}
+
+  ngOnInit(): void {
+    // Fetch eform list when component initializes
+    this.swftTriggerEformService.getEformListByChannel(this.channel, this);
+  }
+
+  // Called when "Select Eform" button is clicked
+  startAddingForms() {
+    this.openEformDialog(); // Open the dialog to select forms
+  }
+
+  // Open the dialog to select eForms
+  openEformDialog() {
+    const selectEformDialogRef = this.dialog.open(SwftSelectEformsComponent, {
+      panelClass: 'custom-dialog-container',
+      width: '70%',
+      height: 'calc(100vh - 8px)',
+      position: { top: '20px' },
+      maxHeight: '95vh',
+      ariaLabelledBy: 'Search Recipient',
+      role: 'dialog',
+      delayFocusTrap: true,
+      restoreFocus: true,
+      ariaLabel: 'Search Recipient',
+      autoFocus: 'first-tabbable',
+      data: { channel: this.channel } // Pass the channel to the dialog
+    });
+
+    const selectEformComponentInstance = selectEformDialogRef.componentInstance;
+
+    // Subscribe to the event emitted by the select component
+    selectEformComponentInstance.eFormsFromRequestTypes.subscribe((data: any) => {
+      this.eformSearch.emit({
+        data: data,
+        selectEformComponentInstance: selectEformComponentInstance,
+      });
+    });
+
+    // Subscribe to the event when forms are selected
+    selectEformComponentInstance.selectedEformDataEvent.subscribe((data: any) => {
+      this.selectedFormsList.emit(data); // Emit the selected forms
+      selectEformComponentInstance.selectedForms = data;
+    });
+  }
+
+  // Show warning modal
+  showWarningModal(utility: any) {
+    this.dialog.open(SwftWarningComponent, {
+      width: '50%',
+      panelClass: 'dialog-padding',
+      data: utility,
+      ariaLabelledBy: 'dialog-content',
+      role: 'alertdialog',
+      autoFocus: true,
+      ariaLabel: 'Warning',
+    });
+  }
+}
+
+2. swft-trigger-eform.component.html:
+
+This HTML defines the layout of the SwftTriggerEformComponent, which includes a button to start adding forms.
+
+<div class="dialog-container">
+  <div class="dialog-section-header">
+    <h4>{{ 'eforms.selected' | translate }}</h4>
+    <button
+      mat-stroked-button
+      class="rounded-button outline-button swft-secondary-small-btn"
+      color="primary"
+      tabindex="0"
+      aria-label="Add recipient"
+      (click)="startAddingForms()" <!-- Call startAddingForms() on click -->
+    >
+      {{ 'Select Eform' | translate }}
+    </button>
+  </div>
+  <div class="dialog-section-content">
+    <p *ngIf="eformList.length">
+      {{ eformTriggerConstants.select_eform_to_send }}
+    </p>
+    <p *ngIf="!eformList.length">
+      {{ eformTriggerConstants.no_eform_selected }}
+    </p>
+  </div>
+</div>
