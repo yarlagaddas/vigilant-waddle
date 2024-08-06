@@ -1,0 +1,44 @@
+The main component of the consuming application, which uses the SwftTriggerEformComponent.
+
+  import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.scss']
+})
+export class AppComponent {
+  title = 'consuming-app';
+  channel = 'AWARE'; // Channel to be passed to the library component
+
+  // Handle the eformSearch event from the library component
+  onEformSearch(event: any) {
+    console.log('Eform Search Event:', event); // Log the eform search event
+  }
+}
+
+HTML template for AppComponent, which includes the SwftTriggerEformComponent.
+
+<app-swft-trigger-eform [channel]="channel" (eformSearch)="onEformSearch($event)"></app-swft-trigger-eform>
+
+
+Explanation of Flow
+AppComponent:
+
+Defines a channel input that will be passed to the SwftTriggerEformComponent.
+Handles the eformSearch event emitted by the SwftTriggerEformComponent.
+SwftTriggerEformComponent:
+
+Receives the channel input and uses it to fetch the list of eForms via the SwftTriggerEformService.
+Provides a button that, when clicked, opens a dialog (implemented by SwftSelectEformsComponent) to select eForms.
+Listens to the selectedEformDataEvent and eFormsFromRequestTypes events emitted by the SwftSelectEformsComponent to handle selected eForms and eForm search events.
+SwftSelectEformsComponent:
+
+Displays a form with a dropdown to select eForms.
+Filters the list of eForms based on user input.
+Emits selectedEformDataEvent when forms are selected and eFormsFromRequestTypes to request eForms based on the channel.
+SwftTriggerEformService:
+
+Fetches the list of eForms based on the provided channel from an API.
+Handles errors and displays a snackbar message if an error occurs.
+This complete flow ensures that the consuming application can use the library to select eForms, with the list of eForms being dynamically fetched based on the provided channel.
