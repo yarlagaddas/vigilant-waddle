@@ -1,0 +1,125 @@
+This component is responsible for the dialog where users can select eForms.
+
+import { Component, OnInit, ViewChild, Input, Output, EventEmitter, Inject } from '@angular/core';
+import { MatPaginator } from '@angular/material/paginator';
+import { MatTable } from '@angular/material/table';
+import { MatButton } from '@angular/material/button';
+import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { Observable } from 'rxjs';
+import { map, startWith } from 'rxjs/operators';
+import { FormControl } from '@angular/forms';
+import { SwftColumnDefinition, Forms } from './types';
+
+@Component({
+  selector: 'swft-select-eforms',
+  templateUrl: './swft-select-eforms.component.html',
+  styleUrls: ['./swft-select-eforms.component.scss']
+})
+export class SwftSelectEformsComponent implements OnInit {
+  @ViewChild('closeButton', { static: false }) closeButton?: MatButton;
+  @ViewChild(MatPaginator) paginator?: MatPaginator;
+  @ViewChild(MatTable) table?: MatTable<any>;
+  @Input() public selectedFormsTableHeader!: any[];
+  @Output() public selectedEformDataEvent: EventEmitter<any> = new EventEmitter<any>();
+  @Output() public eFormsFromRequestTypes: EventEmitter<any> = new EventEmitter<any>();
+
+  filterFormControl = new FormControl(); // Form control for filtering forms
+  forms: Forms[] = []; // List of forms
+  formSelections: any[] = []; // List of selected forms
+  filteredForms!: Observable<Forms[]>; // Filtered list of forms
+
+  constructor(
+    private dialogRef: MatDialogRef<SwftSelectEformsComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: any // Inject data passed to the dialog
+  ) {}
+
+  ngOnInit(): void {
+    this.searchForms(); // Initialize search for forms
+  }
+
+  // Emit event to request forms based on channel
+  public searchForms(): void {
+    this.eFormsFromRequestTypes.emit({ channel: this.data.channel }); // Emit event to request forms based on channel
+    this.filteredForms = this.filterFormControl.valueChanges.pipe(
+      startWith(''),
+      map((value) => this._filter(value))
+    );
+  }
+
+  // Filter the forms based on user input
+  private _filter(value: string): Forms[] {
+    const filterValue = value.toLowerCase();
+    return this.forms.filter((form: any) =>
+      form.formName.toLowerCase().includes(filterValue)
+    );
+  }
+
+  // Handle form selection
+  selectedFormId(selectedForm: Forms): void {
+    this.formSelections = [];
+    this.formSelections.push(selectedForm); // Add selected form to the list
+  }
+
+  // Emit selected forms event and close the dialog
+  addSelectedForms(): void {
+    this.selectedEformDataEvent.emit(this.formSelections); // Emit selected forms event
+    this.closeDialog(); // Close the dialog
+  }
+
+  // Close the dialog
+  closeDialog(): void {
+    this.dialogRef.close(); // Close the dialog
+  }
+}
+
+This HTML defines the layout of the SwftSelectEformsComponent, which includes a form for selecting eForms from a dropdown.
+
+<div class="dialog-container" mat-dialog-content>
+  <div class="dialog-section">
+    <div class="search-form display-flex">
+      <label for="search-eform">Select eForm</label>
+      <mat-form-field appearance="outline" class="select-eform">
+        <input
+          matInput
+          placeholder="Type or select eForm"
+          [formControl]="filterFormControl"
+        />
+        <span class="dropdown-icon">&#8964;</span>
+        <mat-autocomplete autoActiveFirstOption="true" [displayWith]="displayWithFn">
+          <mat-option
+            *ngFor="let eform of filteredForms | async"
+            [value]="eform"
+            (onSelectionChange)="selectedFormId(eform)" <!-- Call selectedFormId(eform) on selection -->
+            [disabled]="isNoDataOption(eform)"
+          >
+            {{ eform.formName || 'No Results Found' }}
+          </mat-option>
+        </mat-autocomplete>
+      </mat-form-field>
+    </div>
+  </div>
+  <div class="dialog-section" *ngIf="formSelections.length">
+    <swft-ng-datagrid
+      [selectedFormDataGrid]="true"
+      [data]="formSelections"
+      [columns]="selectedFormsTableHeader"
+    ></swft-ng-datagrid>
+  </div>
+</div>
+<div mat-dialog-actions class="left-content">
+  <button mat-button class="cancel-button" (click)="closeDialog()">
+    {{ formTriggerConstants.cancel }}
+  </button>
+  <div class="right-content">
+    <button
+      mat-raised-button
+      class="rounded-button outline-button swft-secondary-medium-btn"
+      [disabled]="!formSelections.length"
+      (click)="addSelectedForms()" <!-- Call addSelectedForms() on click -->
+    >
+      {{ formTriggerConstants.select }}
+    </button>
+  </div>
+</div>
+
+
