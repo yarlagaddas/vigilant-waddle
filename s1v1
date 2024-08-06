@@ -1,0 +1,49 @@
+This service is responsible for fetching the list of forms based on the channel.
+
+
+import { Injectable } from '@angular/core';
+import { SubSink } from 'subsink';
+import { SwftIntakeService } from '@swft/swft-ngx-intake-service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { NgProgressComponent } from 'ngx-progressbar';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class SwftTriggerEformService {
+  private subs = new SubSink();
+  public progressBar!: NgProgressComponent;
+
+  constructor(
+    private swftIntakeService: SwftIntakeService,
+    private snackBar: MatSnackBar,
+  ) {}
+
+  // Fetch the list of forms based on the provided channel
+  getEformListByChannel(channel: string, swftComponentInstance: any) {
+    this.subs.add(
+      this.swftIntakeService.listFormsDetailsByChannel(undefined, channel, undefined, undefined).subscribe({
+        next: (response: any) => {
+          const getFormList = response?.result?.results?.eformList;
+          swftComponentInstance.forms = getFormList; // Assign forms to the component instance
+          swftComponentInstance.assignFilterOptions(); // Assign filter options
+          this.progressBar?.complete();
+        },
+        error: (error: any) => {
+          this.openSnackBar(`Error while fetching eform list: ${error}`);
+          this.progressBar?.complete();
+        }
+      })
+    );
+  }
+
+  // Display a snackbar message for errors
+  openSnackBar(msg: string, action?: string) {
+    this.snackBar.open(msg, action ? action : 'Close', {
+      verticalPosition: 'top',
+    });
+    setTimeout(() => {
+      this.snackBar?.dismiss();
+    }, 5000);
+  }
+}
