@@ -1,0 +1,234 @@
+Got it. To ensure that the service method is triggered when you click the “Select Eform” button and open the dialog component, you need to make sure that the method is called at the right moment and that the dialog component handles the data appropriately.
+
+Step 1: Update the Service Method
+
+Update the getEformListByChannel method to not use the Injector for direct component injection, but rather to simply fetch the data and provide it to the component through the method call.
+
+Refactored swft-trigger-eform.service.ts:
+
+import { Injectable } from '@angular/core';
+import { SubSink } from 'subsink';
+import { SwftIntakeService } from '@swft/swft-ngx-intake-service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { NgProgressComponent } from 'ngx-progressbar';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class SwftTriggerEformService {
+  private subs = new SubSink();
+  public progressBar!: NgProgressComponent;
+
+  constructor(
+    private swftIntakeService: SwftIntakeService,
+    private snackBar: MatSnackBar
+  ) {}
+
+  getEformListByChannel(channel: string): Observable<any> {
+    return this.swftIntakeService.listFormsDetailsByChannel(undefined, channel, undefined, undefined);
+  }
+
+  openSnackBar(msg: string, action?: string) {
+    this.snackBar.open(msg, action ? action : 'Close', {
+      verticalPosition: 'top',
+    });
+    setTimeout(() => {
+      this.snackBar?.dismiss();
+    }, 5000);
+  }
+}
+
+Step 2: Update the Component to Use the Refactored Service
+
+Update swft-trigger-eform.component.ts to call the service method when the dialog is opened and pass the data to the dialog component.
+
+Updated swft-trigger-eform.component.ts:
+
+import { Component, OnInit, EventEmitter, Output, Input } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { DatePipe } from '@angular/common';
+import { SwftTriggerEformService } from './swft-trigger-eform.service';
+import { SwftSelectEformsComponent } from './swft-select-eforms.component';
+
+@Component({
+  selector: 'app-swft-trigger-eform',
+  templateUrl: './swft-trigger-eform.component.html',
+  styleUrls: ['./swft-trigger-eform.component.scss'],
+  providers: [SwftTriggerEformService, DatePipe]
+})
+export class SwftTriggerEformComponent implements OnInit {
+  @Input() channel!: string; // Input to receive the channel from the consuming application
+  @Output() eformSearch: EventEmitter<any> = new EventEmitter<any>(); // Output event to emit eform search results
+  @Output() selectedFormsList: EventEmitter<any> = new EventEmitter<any>(); // Output event to emit selected forms
+
+  constructor(
+    private datePipe: DatePipe,
+    private swftTriggerEformService: SwftTriggerEformService, // Inject the service
+    public dialog: MatDialog // Inject MatDialog for opening dialogs
+  ) {}
+
+  ngOnInit(): void {
+    // No need to call the service here
+  }
+
+  // Called when "Select Eform" button is clicked
+  startAddingForms() {
+    this.openEformDialog(); // Open the dialog to select forms
+  }
+
+  // Open the dialog to select eForms
+  openEformDialog() {
+    // Fetch eform list when opening the dialog
+    this.swftTriggerEformService.getEformListByChannel(this.channel).subscribe({
+      next: (response: any) => {
+        const getFormList = response?.result?.results?.eformList;
+
+        const selectEformDialogRef = this.dialog.open(SwftSelectEformsComponent, {
+          panelClass: 'custom-dialog-container',
+          width: '70%',
+          height: 'calc(100vh - 8px)',
+          position: { top: '20px' },
+          maxHeight: '95vh',
+          ariaLabelledBy: 'Search Recipient',
+          role: 'dialog',
+          delayFocusTrap: true,
+          restoreFocus: true,
+          ariaLabel: 'Search Recipient',
+          autoFocus: 'first-tabbable',
+          data: { channel: this.channel, eformList: getFormList } // Pass the channel and eform list to the dialog
+        });
+
+        const selectEformComponentInstance = selectEformDialogRef.componentInstance;
+
+        // Subscribe to the event emitted by the select component
+        selectEformComponentInstance.eFormsFromRequestTypes.subscribe((data: any) => {
+          this.eformSearch.emit({
+            data: data,
+            selectEformComponentInstance: selectEformComponentInstance,
+          });
+        });
+
+        // Subscribe to the event when forms are selected
+        selectEformComponentInstance.selectedEformDataEvent.subscribe((data: any) => {
+          this.selectedFormsList.emit(data); // Emit the selected forms
+          selectEformComponentInstance.selectedForms = data;
+        });
+      },
+      error: (error: any) => {
+        this.swftTriggerEformService.openSnackBar(`Error while fetching eform list: ${error}`);
+      }
+    });
+  }
+
+  // Show warning modal
+  showWarningModal(utility: any) {
+    this.dialog.open(SwftWarningComponent, {
+      width: '50%',
+      panelClass: 'dialog-padding',
+      data: utility,
+      ariaLabelledBy: 'dialog-content',
+      role: 'alertdialog',
+      autoFocus: true,
+      ariaLabel: 'Warning',
+    });
+  }
+}
+
+Step 3: Ensure the Dialog Component Handles the Passed Data
+
+Ensure that swft-select-eforms.component.ts receives and handles the eForm data passed from the parent component.
+
+Updated swft-select-eforms.component.ts:
+
+import { Component, OnInit, ViewChild, Input, Output, EventEmitter, Inject } from '@angular/core';
+import { MatPaginator } from '@angular/material/paginator';
+import { MatTable } from '@angular/material/table';
+import { MatButton } from '@angular/material/button';
+import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { Observable } from 'rxjs';
+import { map, startWith } from 'rxjs/operators';
+import { FormControl } from '@angular/forms';
+import { SwftColumnDefinition, Forms } from './types';
+
+@Component({
+  selector: 'swft-select-eforms',
+  templateUrl: './swft-select-eforms.component.html',
+  styleUrls: ['./swft-select-eforms.component.scss']
+})
+export class SwftSelectEformsComponent implements OnInit {
+  @ViewChild('closeButton', { static: false }) closeButton?: MatButton;
+  @ViewChild(MatPaginator) paginator?: MatPaginator;
+  @ViewChild(MatTable) table?: MatTable<any>;
+  @Input() public selectedFormsTableHeader!: any[];
+  @Output() public selectedEformDataEvent: EventEmitter<any> = new EventEmitter<any>();
+  @Output() public eFormsFromRequestTypes: EventEmitter<any> = new EventEmitter<any>();
+
+  filterFormControl = new FormControl(); // Form control for filtering forms
+  forms: Forms[] = []; // List of forms
+  formSelections: any[] = []; // List of selected forms
+  filteredForms!: Observable<Forms[]>; // Filtered list of forms
+
+  constructor(
+    private dialogRef: MatDialogRef<SwftSelectEformsComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: any // Inject data passed to the dialog
+  ) {}
+
+  ngOnInit(): void {
+    this.forms = this.data.eformList || []; // Initialize forms from passed data
+    this.assignFilterOptions(this.forms);
+  }
+
+  // Emit event to request forms based on channel
+  public searchForms(): void {
+    this.eFormsFromRequestTypes.emit({ channel: this.data.channel });
+    this.filteredForms = this.filterFormControl.valueChanges.pipe(
+      startWith(''),
+      map((value) => this._filter(value))
+    );
+  }
+
+  // Filter the forms based on user input
+  private _filter(value: string): Forms[] {
+    const filterValue = value.toLowerCase();
+    return this.forms.filter((form: any) =>
+      form.formName.toLowerCase().includes(filterValue)
+    );
+  }
+
+  // Handle form selection
+  selectedFormId(selectedForm: Forms): void {
+    this.formSelections = [];
+    this.formSelections.push(selectedForm); // Add selected form to the list
+  }
+
+  // Emit selected forms event and close the dialog
+  addSelectedForms(): void {
+    this.selectedEformDataEvent.emit(this.formSelections); // Emit selected forms event
+    this.closeDialog(); // Close the dialog
+  }
+
+  // Close the dialog
+  closeDialog(): void {
+    this.dialogRef.close(); // Close the dialog
+  }
+
+  // Define assignFilterOptions method inside SwftSelectEformsComponent
+  assignFilterOptions(forms: Forms[]): void {
+    this.forms = forms; // Assign forms to the component instance
+    this.filteredForms = this.filterFormControl.valueChanges.pipe(
+      startWith(''),
+      map((value) => this._filter(value))
+    );
+  }
+}
+
+Summary:
+
+	•	The SwftTriggerEformService fetches eForm data and handles the API call.
+	•	The SwftTriggerEformComponent calls the service method when the “Select Eform” button is clicked, passing the fetched data to the dialog.
+	•	The SwftSelectEformsComponent receives and handles the eForm data, allowing the user to select from the list.
+
+These steps ensure that the service method is called when you click the "Select Eform" button, opening the dialog with the fetched data.
+
+
